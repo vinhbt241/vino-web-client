@@ -37,6 +37,7 @@ export function useRun(): UseRunResult {
       void (async () => {
         let finishedConversationId: string | null = null
         let finished = false
+        let errored = false
         try {
           for await (const event of vino.stream(options)) {
             dispatch({ type: 'event', event })
@@ -45,12 +46,14 @@ export function useRun(): UseRunResult {
             } else if (event.type === 'run_finished') {
               finished = true
               finishedConversationId = event.conversationId || finishedConversationId
+            } else if (event.type === 'error') {
+              errored = true
             }
           }
-          if (!finished) {
+          if (!finished && !errored) {
             const errorEvent: RunEvent = { type: 'error', error: 'run stream ended before run_finished' }
             dispatch({ type: 'event', event: errorEvent })
-          } else if (finishedConversationId !== null) {
+          } else if (finished && finishedConversationId !== null) {
             onFinished?.(finishedConversationId)
           }
         } catch (err) {
