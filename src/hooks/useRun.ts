@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
-import type { RunEvent, RunOptions } from 'vino-sdk'
+import type { RunEvent, RunOptions, WhenBusy } from 'vino-sdk'
 import { describeError } from '../errors'
 import { vino } from '../vino'
 import { initialRunState, runReducer, type RunState } from './runState'
@@ -11,6 +11,7 @@ export interface UseRunResult {
     userText: string,
     conversationId?: string,
     onFinished?: (conversationId: string) => void,
+    whenBusy?: WhenBusy,
   ) => void
   cancel: () => void
   reset: () => void
@@ -22,7 +23,12 @@ export function useRun(): UseRunResult {
   const cancelledRef = useRef(false)
 
   const start = useCallback(
-    (userText: string, conversationId?: string, onFinished?: (conversationId: string) => void) => {
+    (
+      userText: string,
+      conversationId?: string,
+      onFinished?: (conversationId: string) => void,
+      whenBusy?: WhenBusy,
+    ) => {
       dispatch({ type: 'start', userText })
       const controller = new AbortController()
       controllerRef.current = controller
@@ -33,6 +39,7 @@ export function useRun(): UseRunResult {
         signal: controller.signal,
       }
       if (conversationId) options.conversationId = conversationId
+      if (whenBusy !== undefined) options.whenBusy = whenBusy
 
       void (async () => {
         let finishedConversationId: string | null = null

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ChatView } from './components/ChatView'
 import { Sidebar } from './components/Sidebar'
+import { useConversation } from './hooks/useConversation'
 import { useConversations } from './hooks/useConversations'
+import { useLiveEvents } from './hooks/useLiveEvents'
 import { useRun } from './hooks/useRun'
-import { useTranscript } from './hooks/useTranscript'
+import { initialRunState, type RunState } from './hooks/runState'
 import { vino } from './vino'
 
 type Health = 'checking' | 'online' | 'offline'
@@ -12,11 +14,10 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const { state: runState, isRunning, start, cancel, reset } = useRun()
   const conversations = useConversations()
-  const transcript = useTranscript(selectedId)
+  const conversation = useConversation(selectedId)
   const [health, setHealth] = useState<Health>('checking')
 
   const { refresh: refreshConversations } = conversations
-  const { reload: reloadTranscript } = transcript
 
   useEffect(() => {
     let active = true
@@ -29,24 +30,33 @@ function App() {
     }
   }, [])
 
+  // Observe a run this tab did not start, only when viewing that conversation
+  // while no local run is active.
+  const observing = selectedId !== null && runState.status === 'idle' && conversation.isBusy
+  const liveEvents = useLiveEvents(selectedId, observing)
+
   const handleFinished = useCallback(
     (conversationId: string) => {
       void refreshConversations()
-      if (selectedId === null) {
-        setSelectedId(conversationId)
-      } else if (selectedId === conversationId) {
-        reloadTranscript()
-      }
-      reset()
+      if (selectedId === null) setSelectedId(conversationId)
     },
-    [refreshConversations, reloadTranscript, reset, selectedId],
+    [refreshConversations, selectedId],
   )
+
+  // Clear the live overlay once the committed transcript has settled (the
+  // run's final entry is visible from view/watch, so the stream is redundant).
+  useEffect(() => {
+    if (runState.status === 'finished' && selectedId !== null && conversation.isSettled) {
+      reset()
+    }
+  }, [runState.status, selectedId, conversation.isSettled, reset])
 
   const handleSend = useCallback(
     (text: string) => {
-      start(text, selectedId ?? undefined, handleFinished)
+      const whenBusy = observing ? 'steer' : undefined
+      start(text, selectedId ?? undefined, handleFinished, whenBusy)
     },
-    [start, selectedId, handleFinished],
+    [start, selectedId, observing, handleFinished],
   )
 
   const handleSelect = useCallback(
@@ -61,6 +71,24 @@ function App() {
     reset()
     setSelectedId(null)
   }, [reset])
+
+  // Pick the live overlay: the local run (when it belongs to the selection, or
+  // for a new chat), else the observer stream for a busy conversation. Once the
+  // conversation has settled, the committed transcript is the source of truth.
+  let live: RunState = initialRunState
+  let showUserBubble = false
+  if (selectedId === null) {
+    if (runState.status !== 'idle') {
+      live = runState
+      showUserBubble = runState.userText !== ''
+    }
+  } else if (runState.status !== 'idle' && runState.conversationId === selectedId && !conversation.isSettled) {
+    live = runState
+  } else if (observing) {
+    live = liveEvents
+  }
+
+  const runError = runState.status === 'error' ? runState.error : null
 
   const title = selectedId === null ? 'New chat' : `Conversation ${selectedId}`
 
@@ -86,11 +114,18 @@ function App() {
         />
         <ChatView
           title={title}
-          transcript={transcript.transcript}
-          transcriptLoading={transcript.loading}
-          transcriptError={transcript.error}
-          live={runState}
+          entries={conversation.entries}
+          entriesLoading={conversation.loading}
+          entriesError={conversation.error}
+          activeEntryId={conversation.activeEntryId}
+          showUserBubble={showUserBubble}
+          live={live}
+          runError={runError}
           isRunning={isRunning}
+          observing={observing}
+          agent={conversation.agent}
+          documents={conversation.documents}
+          submissions={conversation.submissions}
           onSend={handleSend}
           onCancel={cancel}
         />

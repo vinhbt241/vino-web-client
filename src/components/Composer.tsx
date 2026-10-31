@@ -2,12 +2,14 @@ import { useState } from 'react'
 
 interface ComposerProps {
   isRunning: boolean
+  busy: boolean
   onSend: (text: string) => void
   onCancel: () => void
 }
 
-export function Composer({ isRunning, onSend, onCancel }: ComposerProps) {
+export function Composer({ isRunning, busy, onSend, onCancel }: ComposerProps) {
   const [value, setValue] = useState('')
+  const steer = busy && !isRunning
 
   const submit = () => {
     const text = value.trim()
@@ -27,7 +29,7 @@ export function Composer({ isRunning, onSend, onCancel }: ComposerProps) {
             if (!isRunning) submit()
           }
         }}
-        placeholder="Message vino…"
+        placeholder={steer ? 'Steer the running run…' : 'Message vino…'}
         rows={2}
         disabled={isRunning}
         className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-60"
@@ -48,7 +50,7 @@ export function Composer({ isRunning, onSend, onCancel }: ComposerProps) {
             disabled={value.trim() === ''}
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
           >
-            Send
+            {steer ? 'Steer' : 'Send'}
           </button>
         )}
       </div>

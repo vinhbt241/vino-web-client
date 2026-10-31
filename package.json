@@ -17,7 +17,7 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
-    "vino-sdk": "^0.1.0"
+    "vino-sdk": "^0.2.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

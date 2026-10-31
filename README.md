@@ -55,17 +55,21 @@ src/
   errors.ts                  # describeError() normalizer
   App.tsx                    # layout + wiring (health, select, new-chat, finish)
   hooks/
-    runState.ts              # pure reducer folding RunEvents into UI state
+    runState.ts              # pure reducer folding run/live events into UI state
     runState.test.ts         # unit tests for the reducer
-    useRun.ts                # stream consumption + cancel/reset + onFinished
+    conversationState.ts     # committed-state reducer + busy detection (pure)
+    conversationState.test.ts# unit tests for the committed-state reducer
+    useRun.ts                # local run stream + cancel/reset
+    useConversation.ts       # committed transcript via view + watch (live sync)
+    useLiveEvents.ts         # live events for runs this tab didn't start
     useConversations.ts      # list / refresh / load-more (nextCursor)
-    useTranscript.ts         # transcript loading (derived state, no stale flashes)
   components/
-    ChatView.tsx             # messages + composer + banners
+    ChatView.tsx             # messages + composer + banners + details toggle
     MessageList.tsx          # transcript + live run rendering
     ToolCard.tsx             # collapsible tool call card (auto-expands on error)
-    Composer.tsx             # input + send + stop
+    Composer.tsx             # input + send/steer + stop
     Sidebar.tsx              # conversation list + load more + new chat
+    ConversationDetails.tsx  # agent config, documents, submissions readout
     Markdown.tsx             # react-markdown wrapper
     ErrorBanner.tsx          # inline error banner
 ```
@@ -77,9 +81,23 @@ src/
   `idle | running | finished | error` status.
 - **Resume** — sending in an open conversation passes its `conversationId` so the
   server appends to it rather than starting a new run.
-- **Finish** — on `run_finished`, the sidebar refreshes and the transcript
-  reloads (the server-persisted transcript is the source of truth for completed
-  turns).
+- **Live sync** — the open conversation's transcript comes from
+  `viewConversation` (snapshot) followed by `watchConversation` (committed
+  changes), so completed turns appear as commits land from any client, with no
+  manual reload. While a run is in flight, its committed assistant/tool entries
+  are hidden in favor of the live overlay; they render once the submission
+  settles.
+- **Observe others' runs** — selecting a conversation that is busy (has a
+  queued/placed submission) opens `events` to stream its live deltas, so a run
+  started elsewhere is visible in real time.
+- **Steer** — sending into a busy conversation uses `whenBusy: "steer"`: the
+  message is appended to the transcript and the in-flight run re-runs with it
+  in context (the composer switches to a "Steer" action while observing).
+- **Details** — the header "Details" toggle shows the conversation's agent
+  config, documents, and submission records from the `/view` snapshot.
+- **Finish** — on `run_finished`, the sidebar refreshes and the new conversation
+  is selected (for a fresh chat); the live overlay clears once the committed
+  transcript has settled.
 - **Errors** — inline banners: run errors, transcript-load errors, and a
   "backend offline" banner driven by `/health` on load.
 - **Cancel** — the Stop button aborts the in-flight request via `AbortSignal`.
@@ -89,6 +107,6 @@ src/
 - Assistant text is rendered as markdown (GFM + syntax highlighting) via
   `react-markdown` without `rehype-raw`, so raw HTML is never injected — no
   sanitizer needed.
-- The SDK's advanced run options (`systemPrompt`, `maxIterations`, `toolTimeout`,
-  `requestId`) are intentionally not exposed in the UI for v1; the SDK defaults
-  apply.
+- The SDK's remaining run options (`systemPrompt`, `maxIterations`,
+  `toolTimeout`, `requestId`) are intentionally not exposed in the UI for v1;
+  the SDK defaults apply. (`whenBusy` is surfaced as the steer action.)

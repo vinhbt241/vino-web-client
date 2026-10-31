@@ -3,7 +3,17 @@ import type { RunState } from '../hooks/runState'
 import { Markdown } from './Markdown'
 import { ToolCard } from './ToolCard'
 
-export function MessageList({ entries, live }: { entries: Entry[]; live: RunState }) {
+interface MessageListProps {
+  entries: Entry[]
+  live: RunState
+  /** Start of the in-flight turn; its committed assistant/tool entries are hidden (the live overlay shows them). */
+  activeEntryId: string | null
+  /** Show the optimistic user bubble (new chats only, before a transcript exists). */
+  showUserBubble: boolean
+}
+
+export function MessageList({ entries, live, activeEntryId, showUserBubble }: MessageListProps) {
+  const visibleEntries = visibleCommittedEntries(entries, activeEntryId)
   const hasLive =
     live.userText !== '' ||
     live.text !== '' ||
@@ -12,12 +22,12 @@ export function MessageList({ entries, live }: { entries: Entry[]; live: RunStat
 
   return (
     <>
-      {entries.map((entry) => (
+      {visibleEntries.map((entry) => (
         <TranscriptEntry key={entry.id} entry={entry} />
       ))}
       {hasLive && (
         <>
-          {live.userText !== '' && <UserBubble text={live.userText} />}
+          {showUserBubble && live.userText !== '' && <UserBubble text={live.userText} />}
           {live.status === 'running' && live.text === '' && live.toolCalls.length === 0 && (
             <p className="px-1 text-sm italic text-zinc-500">Thinking…</p>
           )}
@@ -33,6 +43,20 @@ export function MessageList({ entries, live }: { entries: Entry[]; live: RunStat
       )}
     </>
   )
+}
+
+/**
+ * Committed entries shown under a live run: everything before the in-flight
+ * turn, plus any user turns inside it (queued/steered inputs). The in-flight
+ * assistant/tool entries are suppressed — the live overlay renders those.
+ */
+function visibleCommittedEntries(entries: Entry[], activeEntryId: string | null): Entry[] {
+  if (activeEntryId === null) return entries
+  const idx = entries.findIndex((e) => e.id === activeEntryId)
+  if (idx === -1) return entries
+  const before = entries.slice(0, idx)
+  const userTurns = entries.slice(idx).filter((e) => e.message.role === 'user')
+  return [...before, ...userTurns]
 }
 
 function TranscriptEntry({ entry }: { entry: Entry }) {
